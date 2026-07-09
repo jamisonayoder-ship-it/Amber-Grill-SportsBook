@@ -455,32 +455,16 @@ function Intro({ onFinish }) {
   const [phase, setPhase] = useState("off");
   const done = React.useRef(false);
   useEffect(() => {
-    const ignite = () => setPhase((p) => (p === "off" ? "on" : p));
-    const opts = { passive: true, once: true };
-    window.addEventListener("wheel", ignite, opts);
-    window.addEventListener("touchmove", ignite, opts);
-    window.addEventListener("scroll", ignite, opts);
-    window.addEventListener("keydown", ignite, { once: true });
-    const auto = setTimeout(ignite, 6000);
-    return () => {
-      window.removeEventListener("wheel", ignite);
-      window.removeEventListener("touchmove", ignite);
-      window.removeEventListener("scroll", ignite);
-      window.removeEventListener("keydown", ignite);
-      clearTimeout(auto);
-    };
-  }, []);
-  useEffect(() => {
     if (phase !== "on" || done.current) return;
     done.current = true;
-    const t = setTimeout(onFinish, 1750);
+    const t = setTimeout(onFinish, 500); // once lit, hold 0.5s then enter
     return () => clearTimeout(t);
   }, [phase, onFinish]);
 
   const lit = phase === "on";
   const FCORE = "#fff2d6", FGLOW = "#ff8a1e";
   const GCORE = "#eafff2", GGLOW = "#19e05f";
-  const igniteAnim = "agIgnite 1.2s steps(1,end) both";
+  const igniteAnim = "agIgnite 0.45s steps(1,end) both";
   const css = `
     @keyframes agIgnite {
       0%{opacity:0} 3%{opacity:.7} 6%{opacity:0} 9%{opacity:.85} 12%{opacity:.1}
@@ -508,7 +492,7 @@ function Intro({ onFinish }) {
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 0, paddingLeft: "0.42em", color: GCORE, textShadow: `0 0 3px ${GCORE}, 0 0 9px ${GGLOW}, 0 0 20px ${GGLOW}, 0 0 38px ${GGLOW}`, opacity: lit ? 1 : 0, animation: lit ? igniteAnim : "none" }}>SPORTSBOOK</span>
       </div>
       {!lit && (
-        <div style={{ position: "absolute", bottom: "12%", fontSize: 12.5, fontWeight: 800, letterSpacing: 2, color: "#7c8896", textTransform: "uppercase", animation: "agHint 1.4s ease-in-out infinite" }}>Scroll to light it up ↓</div>
+        <div style={{ position: "absolute", bottom: "12%", fontSize: 12.5, fontWeight: 800, letterSpacing: 2, color: "#7c8896", textTransform: "uppercase", animation: "agHint 1.4s ease-in-out infinite" }}>Tap to light up</div>
       )}
     </div>
   );
@@ -793,18 +777,14 @@ function App() {
       String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</pre>';
   }
   try {
-    if (!window.React || !window.ReactDOM)
-      return fail('React did not load. If you use an ad/script blocker, allow cdn.jsdelivr.net and reload.');
-    if (!window.Babel)
-      return fail('The compiler (Babel) did not load. Allow cdn.jsdelivr.net and reload.');
+    if (!window.React || !window.ReactDOM) return fail('React did not load. Allow cdn.jsdelivr.net and reload.');
+    if (!window.Babel) return fail('The compiler (Babel) did not load. Allow cdn.jsdelivr.net and reload.');
     var src = document.getElementById('appsrc').textContent;
     var out = Babel.transform(src, { presets: ['react'] }).code;
     var factory = new Function('React', 'ReactDOM', out + '\n;return App;');
     var App = factory(window.React, window.ReactDOM);
     window.ReactDOM.createRoot(document.getElementById('root')).render(window.React.createElement(App));
-  } catch (e) {
-    fail((e && e.stack) || e);
-  }
+  } catch (e) { fail((e && e.stack) || e); }
 })();
 </script>
 </body>
