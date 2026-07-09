@@ -9,13 +9,14 @@
   #root { min-height: 100vh; }
   .booting { color:#8a98a8; font-family: system-ui, sans-serif; text-align:center; padding-top:40vh; }
 </style>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js"></script>
 </head>
 <body>
 <div id="root"><div class="booting">Lighting the sign…</div></div>
-<script type="text/babel" data-presets="react">
+
+<script type="text/plain" id="appsrc">
 const { useMemo, useState, useEffect } = React;
 
 /* ============================================================
@@ -782,8 +783,29 @@ function App() {
     </div>
   );
 }
+</script>
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+<script>
+(function () {
+  function fail(msg) {
+    document.getElementById('root').innerHTML =
+      '<pre style="color:#ff9a9a;white-space:pre-wrap;padding:18px;font:13px/1.5 ui-monospace,Menlo,monospace;">' +
+      String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</pre>';
+  }
+  try {
+    if (!window.React || !window.ReactDOM)
+      return fail('React did not load. If you use an ad/script blocker, allow cdn.jsdelivr.net and reload.');
+    if (!window.Babel)
+      return fail('The compiler (Babel) did not load. Allow cdn.jsdelivr.net and reload.');
+    var src = document.getElementById('appsrc').textContent;
+    var out = Babel.transform(src, { presets: ['react'] }).code;
+    var factory = new Function('React', 'ReactDOM', out + '\n;return App;');
+    var App = factory(window.React, window.ReactDOM);
+    window.ReactDOM.createRoot(document.getElementById('root')).render(window.React.createElement(App));
+  } catch (e) {
+    fail((e && e.stack) || e);
+  }
+})();
 </script>
 </body>
 </html>
