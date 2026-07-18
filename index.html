@@ -15,7 +15,6 @@
 </head>
 <body>
 <div id="root"><div class="booting">Lighting the sign…</div></div>
-
 <script type="text/plain" id="appsrc">
 const { useMemo, useState, useEffect } = React;
 
@@ -462,13 +461,11 @@ function Flame({ lit }) {
 
 function Intro({ onFinish }) {
   const [phase, setPhase] = useState("off");
-  const done = React.useRef(false);
   useEffect(() => {
-    if (phase !== "on" || done.current) return;
-    done.current = true;
-    const t = setTimeout(onFinish, 500); // once lit, hold 0.5s then enter
-    return () => clearTimeout(t);
-  }, [phase, onFinish]);
+    const litT = setTimeout(() => setPhase("on"), 120); // light the sign
+    const doneT = setTimeout(onFinish, 1000);           // then advance to the book
+    return () => { clearTimeout(litT); clearTimeout(doneT); };
+  }, [onFinish]);
 
   const lit = phase === "on";
   const FCORE = "#fff2d6", FGLOW = "#ff8a1e";
@@ -484,7 +481,7 @@ function Intro({ onFinish }) {
     @keyframes agHint { 0%,100%{opacity:.35;transform:translateY(0)} 50%{opacity:1;transform:translateY(5px)} }
   `;
   return (
-    <div onClick={() => setPhase((p) => (p === "off" ? "on" : p))} style={{ position: "fixed", inset: 0, zIndex: 200, background: "radial-gradient(120% 90% at 50% 42%, #0d1016 0%, #07090c 62%, #040507 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", cursor: "pointer", fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "radial-gradient(120% 90% at 50% 42%, #0d1016 0%, #07090c 62%, #040507 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" }}>
       <style>{css}</style>
       <div style={{ position: "relative", animation: lit ? "agBuzz 4s ease-in-out 1.25s infinite" : "none" }}>
         <div style={{ position: "relative", background: lit ? "#5c1a26" : "#3a1219", borderRadius: 16, padding: "clamp(22px,5vw,36px) clamp(30px,7vw,54px)", border: "3px solid #37231a", transition: "background .3s", boxShadow: lit ? "0 0 40px rgba(0,0,0,.6)" : "none" }}>
@@ -500,9 +497,6 @@ function Intro({ onFinish }) {
         <span style={{ color: "#132318" }}>SPORTSBOOK</span>
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 0, paddingLeft: "0.42em", color: GCORE, textShadow: `0 0 3px ${GCORE}, 0 0 9px ${GGLOW}, 0 0 20px ${GGLOW}, 0 0 38px ${GGLOW}`, opacity: lit ? 1 : 0, animation: lit ? igniteAnim : "none" }}>SPORTSBOOK</span>
       </div>
-      {!lit && (
-        <div style={{ position: "absolute", bottom: "12%", fontSize: 12.5, fontWeight: 800, letterSpacing: 2, color: "#7c8896", textTransform: "uppercase", animation: "agHint 1.4s ease-in-out infinite" }}>Tap to light up</div>
-      )}
     </div>
   );
 }
@@ -848,23 +842,16 @@ function App() {
   );
 }
 </script>
-
 <script>
 (function () {
-  function fail(msg) {
-    document.getElementById('root').innerHTML =
-      '<pre style="color:#ff9a9a;white-space:pre-wrap;padding:18px;font:13px/1.5 ui-monospace,Menlo,monospace;">' +
-      String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</pre>';
-  }
-  try {
-    if (!window.React || !window.ReactDOM) return fail('React did not load. Allow cdn.jsdelivr.net and reload.');
-    if (!window.Babel) return fail('The compiler (Babel) did not load. Allow cdn.jsdelivr.net and reload.');
-    var src = document.getElementById('appsrc').textContent;
-    var out = Babel.transform(src, { presets: ['react'] }).code;
-    var factory = new Function('React', 'ReactDOM', out + '\n;return App;');
-    var App = factory(window.React, window.ReactDOM);
+  function fail(msg){document.getElementById('root').innerHTML='<pre style="color:#ff9a9a;white-space:pre-wrap;padding:18px;font:13px/1.5 ui-monospace,Menlo,monospace;">'+String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre>';}
+  try{
+    if(!window.React||!window.ReactDOM)return fail('React did not load. Allow cdn.jsdelivr.net and reload.');
+    if(!window.Babel)return fail('The compiler (Babel) did not load. Allow cdn.jsdelivr.net and reload.');
+    var out=Babel.transform(document.getElementById('appsrc').textContent,{presets:['react']}).code;
+    var App=new Function('React','ReactDOM',out+'\n;return App;')(window.React,window.ReactDOM);
     window.ReactDOM.createRoot(document.getElementById('root')).render(window.React.createElement(App));
-  } catch (e) { fail((e && e.stack) || e); }
+  }catch(e){fail((e&&e.stack)||e);}
 })();
 </script>
 </body>
