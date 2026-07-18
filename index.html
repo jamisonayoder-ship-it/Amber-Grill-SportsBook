@@ -28,7 +28,7 @@ const POLL_MS = 60000;
 
 /* ---- PASTE YOUR GOOGLE APPS SCRIPT WEB-APP URL HERE ----
    (ends in /exec).  Leave "" to disable bet logging.        */
-const BET_ENDPOINT = "https://script.google.com/macros/s/AKfycbwKclkI6R5jd1_0Zl6RmlpECr6pXVp3S87XuuZwbg3hpuXAnBjrrv5U5HtBpM0a5qwvMw/exec";
+const BET_ENDPOINT = "https://script.google.com/macros/s/AKfycbyyu-3pnGdyL-Ppq-SXgtKjxhLzRV2tGw6CISLM0qWVvI4FE9HZRDwduWtnzgIeOHVKmA/exec";
 
 /* ---------- Team Keeper Wars — 9 group score feeds ---------- */
 const TKW_FEEDS = [
@@ -434,13 +434,20 @@ async function postExchange(action, payload) {
     await fetch(BET_ENDPOINT, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, ...payload }) });
   } catch (e) { /* fire and forget */ }
 }
-async function fetchOpenBets() {
-  if (!BET_ENDPOINT) return [];
-  try {
-    const res = await fetch(BET_ENDPOINT + "?action=list", { method: "GET" });
-    const data = await res.json();
-    return Array.isArray(data.bets) ? data.bets : [];
-  } catch (e) { return null; } // null = couldn't reach
+// Read the open-bet list via JSONP (script tag) — avoids Apps Script CORS blocks.
+function fetchOpenBets() {
+  return new Promise((resolve) => {
+    if (!BET_ENDPOINT) return resolve([]);
+    const cb = "agcb_" + Math.random().toString(36).slice(2);
+    let s = null;
+    const cleanup = () => { clearTimeout(timer); try { delete window[cb]; } catch (e) { window[cb] = undefined; } if (s && s.parentNode) s.parentNode.removeChild(s); };
+    const timer = setTimeout(() => { cleanup(); resolve(null); }, 9000);
+    window[cb] = (data) => { cleanup(); resolve(data && Array.isArray(data.bets) ? data.bets : []); };
+    s = document.createElement("script");
+    s.src = BET_ENDPOINT + "?action=list&callback=" + cb + "&t=" + Date.now();
+    s.onerror = () => { cleanup(); resolve(null); };
+    document.head.appendChild(s);
+  });
 }
 
 /* ============ NEON INTRO — Amber Grill logo in a neon-bordered bar sign ============ */
