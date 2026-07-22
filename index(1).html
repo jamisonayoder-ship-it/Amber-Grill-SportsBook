@@ -271,9 +271,9 @@ const legFromFuture = (f, compName) => ({ id: `fut-${norm(compName)}-${norm(f.na
 function Badge({ children, bg = C.panel2, fg = C.sub }) {
   return <span style={{ background: bg, color: fg, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, padding: "2px 6px", borderRadius: 4, textTransform: "uppercase" }}>{children}</span>;
 }
-function OddsBtn({ top, odds, active, onClick }) {
+function OddsBtn({ top, odds, active, onClick, disabled = false }) {
   return (
-    <button onClick={onClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, width: "100%", padding: "8px 4px", borderRadius: 8, cursor: "pointer", border: `1px solid ${active ? C.green : C.line}`, background: active ? "rgba(63,220,107,0.12)" : C.chip, color: C.text }}>
+    <button onClick={disabled ? undefined : onClick} disabled={disabled} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, width: "100%", padding: "8px 4px", borderRadius: 8, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1, border: `1px solid ${active ? C.green : C.line}`, background: active ? "rgba(63,220,107,0.12)" : C.chip, color: C.text }}>
       {top != null && <span style={{ fontSize: 11, color: C.sub, fontWeight: 700, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{top}</span>}
       <span style={{ fontSize: 14, fontWeight: 800, color: active ? C.green : C.text }}>{fmt(odds)}</span>
     </button>
@@ -282,6 +282,7 @@ function OddsBtn({ top, odds, active, onClick }) {
 
 function GameCard({ game, selected, toggle, hideToggle = false }) {
   const [showProps, setShowProps] = useState(false);
+  const locked = !!game.live; // score entered = game over = betting closed
   const isSel = (id) => selected.has(id);
   const m = game.markets;
   const SpTotRow = ({ team, side, isOver }) => (
@@ -290,19 +291,33 @@ function GameCard({ game, selected, toggle, hideToggle = false }) {
         <span style={{ fontSize: 10, fontWeight: 800, color: C.sub, background: C.panel2, borderRadius: 5, padding: "3px 5px", flexShrink: 0 }}>{abbr(team)}</span>
         <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team}</span>
       </div>
-      <OddsBtn top={`${(side === "a" ? m.spread.aLine : m.spread.bLine) > 0 ? "+" : ""}${side === "a" ? m.spread.aLine : m.spread.bLine}`} odds={side === "a" ? m.spread.aOdds : m.spread.bOdds} active={isSel(`${game.key}-spread-${side}`)} onClick={() => toggle(legFromMarket(game, "spread", side))} />
-      <OddsBtn top={`${isOver ? "O" : "U"} ${m.total.line}`} odds={isOver ? m.total.overOdds : m.total.underOdds} active={isSel(`${game.key}-total-${isOver ? "over" : "under"}`)} onClick={() => toggle(legFromMarket(game, "total", isOver ? "over" : "under"))} />
+      <OddsBtn disabled={locked} top={`${(side === "a" ? m.spread.aLine : m.spread.bLine) > 0 ? "+" : ""}${side === "a" ? m.spread.aLine : m.spread.bLine}`} odds={side === "a" ? m.spread.aOdds : m.spread.bOdds} active={isSel(`${game.key}-spread-${side}`)} onClick={() => toggle(legFromMarket(game, "spread", side))} />
+      <OddsBtn disabled={locked} top={`${isOver ? "O" : "U"} ${m.total.line}`} odds={isOver ? m.total.overOdds : m.total.underOdds} active={isSel(`${game.key}-total-${isOver ? "over" : "under"}`)} onClick={() => toggle(legFromMarket(game, "total", isOver ? "over" : "under"))} />
     </div>
   );
+  if (locked) {
+    return (
+      <div style={{ background: C.panel, border: `1px solid ${C.gold}`, borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Badge bg={C.chip}>Grp {game.group}</Badge>
+          <Badge bg={C.chip}>{game.conf}</Badge>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 800, color: C.gold, letterSpacing: 0.5 }}><span style={{ width: 7, height: 7, borderRadius: 99, background: C.gold }} />FINAL</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+          <span style={{ flex: 1, fontSize: 14, fontWeight: 800, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.A}</span>
+          <span style={{ flexShrink: 0, fontSize: 18, fontWeight: 900, color: C.gold, background: C.chip, border: `1px solid ${C.line}`, borderRadius: 9, padding: "4px 12px" }}>{game.scoreA} – {game.scoreB}</span>
+          <span style={{ flex: 1, fontSize: 14, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.B}</span>
+        </div>
+        <div style={{ marginTop: 8, textAlign: "center", fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: C.sub, background: C.chip, border: `1px dashed ${C.line}`, borderRadius: 8, padding: "7px" }}>🔒 BETTING CLOSED — GAME OVER</div>
+      </div>
+    );
+  }
   return (
-    <div style={{ background: C.panel, border: `1px solid ${game.live ? C.gold : C.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
+    <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <Badge bg={C.chip}>Grp {game.group}</Badge>
         <Badge bg={C.chip}>{game.conf}</Badge>
-        {game.live
-          ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 800, color: C.gold, letterSpacing: 0.5 }}><span style={{ width: 7, height: 7, borderRadius: 99, background: C.gold }} />FINAL</span>
-          : <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>{game.round}{game.time ? ` · ${game.time}` : ""}</span>}
-        {game.live && <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 800, color: C.gold }}>{game.scoreA}–{game.scoreB}</span>}
+        <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>{game.round}{game.time ? ` · ${game.time}` : ""}</span>
       </div>
 
       <div style={{ fontSize: 9.5, fontWeight: 800, color: C.sub, letterSpacing: 0.6, marginBottom: 5 }}>MATCH RESULT (INCL. DRAW)</div>
@@ -416,7 +431,7 @@ function useLiveScores(feeds, baseBoard) {
       const byGame = {}; // dedupe result rows by pair+round
       await Promise.all(feeds.map(async (url) => {
         try {
-          const res = await fetch(url, { cache: "no-store" });
+          const res = await fetch(url + "&cb=" + Date.now(), { cache: "no-store" });
           if (!res.ok) return;
           const txt = await res.text();
           if (txt.trim().startsWith("<!")) return;
@@ -506,6 +521,18 @@ async function fetchAllBets() {
   if (!_db) return null;
   try {
     const snap = await _db.collection("bets").orderBy("tsMs", "desc").get();
+    return snap.docs.map((d) => d.data());
+  } catch (e) { return null; }
+}
+async function submitMatch(m) {
+  if (!_db) return { ok: false, error: "no-db" };
+  try { await _db.collection("matches").add(m); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+}
+async function fetchMatches() {
+  if (!_db) return null;
+  try {
+    const snap = await _db.collection("matches").get();
     return snap.docs.map((d) => d.data());
   } catch (e) { return null; }
 }
@@ -611,6 +638,67 @@ function App() {
   };
   const active = comps[comp];
 
+  // ---- Open bets: unmatched tickets anyone can take the other side of ----
+  const [openBets, setOpenBets] = useState([]);
+  const [openReach, setOpenReach] = useState("idle"); // idle | ok | down
+  const [showOpen, setShowOpen] = useState(false);
+  const [matchTarget, setMatchTarget] = useState(null);
+  const [matcher, setMatcher] = useState("");
+  const refreshOpen = async () => {
+    const [bets, matches] = await Promise.all([fetchAllBets(), fetchMatches()]);
+    if (bets === null || matches === null) { setOpenReach("down"); return; }
+    const taken = {};
+    matches.forEach((m) => { if (m.ticketId) taken[m.ticketId] = m.matcher || "—"; });
+    const now = Date.now();
+    setOpenBets(bets.filter((b) => !taken[b.ticketId] && (!b.tsMs || now - b.tsMs < 24 * 60 * 60 * 1000)));
+    setOpenReach("ok");
+  };
+  useEffect(() => {
+    refreshOpen();
+    const id = setInterval(refreshOpen, POLL_MS);
+    return () => clearInterval(id);
+  }, []);
+  // Matcher covers the bettor's winnings to win their stake.
+  const matcherOdds = (b) => { const risk = Number(b.toWin), win = Number(b.stake); if (!risk || !win) return ""; return fmt(toAmerican(1 + win / risk)); };
+  const doMatch = () => {
+    if (!matchTarget || !matcher.trim()) return;
+    submitMatch({ ticketId: matchTarget.ticketId, matcher: matcher.trim(), time: stampNow(), tsMs: Date.now() });
+    setOpenBets((p) => p.filter((b) => b.ticketId !== matchTarget.ticketId)); // optimistic
+    setMatchTarget(null); setMatcher("");
+    setTimeout(refreshOpen, 1500);
+  };
+
+  // ---- Create-your-own bet: free-text bet + your own odds ----
+  const [customOpen, setCustomOpen] = useState(false);
+  const [cName, setCName] = useState("");
+  const [cDesc, setCDesc] = useState("");
+  const [cOdds, setCOdds] = useState("+150");
+  const [cStake, setCStake] = useState(10);
+  const [cDone, setCDone] = useState(null);
+  const parseOdds = (t) => {
+    const s = String(t).trim().replace(/\s/g, "");
+    if (!/^[+-]?\d{2,5}$/.test(s)) return null;
+    let n = parseInt(s, 10);
+    if (!/^[+-]/.test(s)) n = Math.abs(n); // bare number = plus odds
+    if (Math.abs(n) < 100) return null;
+    return n;
+  };
+  const cParsed = parseOdds(cOdds);
+  const cToWin = cParsed == null || cStake <= 0 ? 0 : (cParsed > 0 ? (cStake * cParsed) / 100 : (cStake * 100) / Math.abs(cParsed));
+  const canCustom = cName.trim().length > 0 && cDesc.trim().length > 0 && cParsed != null && cStake > 0;
+  const submitCustom = () => {
+    if (!canCustom) return;
+    const ticketId = "AG-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+    submitBet({
+      ticketId, tsMs: Date.now(), time: stampNow(), bettor: cName.trim(),
+      competition: "Custom", match: "Custom bet", pick: cDesc.trim(),
+      odds: fmt(cParsed), stake: cStake, toWin: Number(cToWin.toFixed(2)),
+    });
+    setCDone(ticketId);
+    setTimeout(refreshOpen, 1500);
+  };
+  const openCustom = () => { setCName(bettor); setCDesc(""); setCOdds("+150"); setCStake(10); setCDone(null); setCustomOpen(true); };
+
   // ---- PIN-locked ledger: every submitted bet, timestamped ----
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [pin, setPin] = useState("");
@@ -619,8 +707,12 @@ function App() {
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const loadLedger = async () => {
     setLedgerLoading(true);
-    const bets = await fetchAllBets();
-    setAllBets(bets);
+    const [bets, matches] = await Promise.all([fetchAllBets(), fetchMatches()]);
+    if (bets) {
+      const taken = {};
+      (matches || []).forEach((m) => { if (m.ticketId) taken[m.ticketId] = m.matcher || "—"; });
+      setAllBets(bets.map((b) => ({ ...b, matchedBy: taken[b.ticketId] || null })));
+    } else setAllBets(null);
     setLedgerLoading(false);
   };
   const tryPin = () => { if (pin === LEDGER_PIN) { setUnlocked(true); loadLedger(); } };
@@ -661,6 +753,7 @@ function App() {
       toWin: Number(profit.toFixed(2)),
     });
     setPlaced(ticketId);
+    setTimeout(refreshOpen, 1500);
   };
 
   const HOLD_MS = 1100;
@@ -730,11 +823,42 @@ function App() {
         </span>
       </header>
 
-      {/* staff ledger — PIN locked */}
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "10px 12px 0", display: "flex", justifyContent: "flex-end" }}>
-        <button onClick={() => { setLedgerOpen(true); setPin(""); setUnlocked(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 99, cursor: "pointer", border: `1px solid ${C.line}`, background: C.panel, color: C.sub, fontWeight: 800, fontSize: 12 }}>
-          🔒 Staff ledger
+      {/* open bets — take the other side of someone's ticket */}
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "10px 12px 0" }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setShowOpen((v) => !v)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, cursor: "pointer", border: `1px solid ${showOpen ? C.green : C.line}`, background: C.panel, color: C.text }}>
+            <span style={{ fontSize: 14, fontWeight: 900 }}>🤝 Open Bets</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color: C.green, background: "rgba(63,220,107,0.14)", borderRadius: 99, padding: "2px 8px" }}>{openBets.length}</span>
+            <span style={{ marginLeft: "auto", fontSize: 12, color: C.sub, fontWeight: 700 }}>{showOpen ? "Hide ▲" : "Match a bet ▼"}</span>
+          </button>
+          <button onClick={() => { setLedgerOpen(true); setPin(""); setUnlocked(false); }} style={{ flexShrink: 0, padding: "10px 14px", borderRadius: 12, cursor: "pointer", border: `1px solid ${C.line}`, background: C.panel, color: C.sub, fontWeight: 800, fontSize: 13 }}>🔒</button>
+        </div>
+        <button onClick={openCustom} style={{ width: "100%", marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 12px", borderRadius: 12, cursor: "pointer", border: `1px dashed ${C.green}`, background: "rgba(63,220,107,0.06)", color: C.green, fontWeight: 800, fontSize: 13 }}>
+          ✍️ Create your own bet — name your terms
         </button>
+        {showOpen && (
+          <div style={{ marginTop: 8 }}>
+            {openReach === "down" && <div style={{ padding: "16px 12px", textAlign: "center", color: C.sub, fontSize: 12.5, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10 }}>Couldn't reach the exchange. Try again shortly.</div>}
+            {openReach !== "down" && openBets.length === 0 && <div style={{ padding: "16px 12px", textAlign: "center", color: C.sub, fontSize: 12.5, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10 }}>No open bets right now. Place one and it lands here for someone to match.</div>}
+            {openBets.map((b) => (
+              <div key={b.ticketId} style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontSize: 14.5, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.bettor || "—"}</span>
+                  <span style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>{b.competition || ""}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 15, fontWeight: 900, color: C.green, flexShrink: 0 }}>{b.odds}</span>
+                </div>
+                {b.match ? <div style={{ fontSize: 11.5, color: C.sub, fontWeight: 700, marginTop: 1 }}>{b.match}</div> : null}
+                <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, margin: "4px 0 6px", lineHeight: 1.4 }}>{b.pick}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>Their stake {money(Number(b.stake) || 0)} · to win {money(Number(b.toWin) || 0)}</span>
+                  <button onClick={() => { setMatcher(""); setMatchTarget(b); }} style={{ marginLeft: "auto", flexShrink: 0, padding: "9px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${C.green}`, background: "rgba(63,220,107,0.12)", color: C.green, fontWeight: 800, fontSize: 12, lineHeight: 1.2, textAlign: "center" }}>
+                    Match this bet<br /><span style={{ fontSize: 12.5, fontWeight: 900 }}>risk {money(Number(b.toWin) || 0)} → win {money(Number(b.stake) || 0)}</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* competition selector */}
@@ -866,6 +990,61 @@ function App() {
         </div>
       )}
 
+      {customOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 55, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(0,0,0,.72)" }} onClick={() => setCustomOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400, width: "100%", background: C.panel, border: `1px solid ${C.green}`, borderRadius: 16, padding: "18px 18px 20px", boxShadow: "0 20px 60px rgba(0,0,0,.6)" }}>
+            {cDone ? (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 30, marginBottom: 6 }}>🎟️</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: C.green, marginBottom: 4 }}>Bet {cDone} posted</div>
+                <div style={{ fontSize: 12.5, color: C.sub, fontWeight: 600, marginBottom: 14, lineHeight: 1.4 }}>It's live in Open Bets — first person to match it has action.</div>
+                <button onClick={() => setCustomOpen(false)} style={{ width: "100%", height: 46, borderRadius: 12, border: "none", cursor: "pointer", background: C.green, color: "#062812", fontSize: 14.5, fontWeight: 900 }}>Done</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 2 }}>Create your own bet ✍️</div>
+                <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, marginBottom: 12, lineHeight: 1.4 }}>Write any bet, set your odds and stake. It posts to Open Bets for someone to match.</div>
+                <input value={cName} onChange={(e) => setCName(e.target.value)} placeholder="Your name (required)" style={{ width: "100%", boxSizing: "border-box", background: C.chip, border: `1px solid ${cName.trim() ? C.line : C.red}`, borderRadius: 10, color: C.text, fontSize: 13.5, fontWeight: 700, padding: "10px 12px", outline: "none", marginBottom: 8 }} />
+                <textarea value={cDesc} onChange={(e) => setCDesc(e.target.value)} placeholder={'Your bet — e.g. "Yoder saves a penalty on Sunday"'} rows={3} style={{ width: "100%", boxSizing: "border-box", resize: "vertical", background: C.chip, border: `1px solid ${cDesc.trim() ? C.line : C.red}`, borderRadius: 10, color: C.text, fontSize: 13.5, fontWeight: 600, padding: "10px 12px", outline: "none", marginBottom: 8, fontFamily: "inherit", lineHeight: 1.4 }} />
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: C.sub, letterSpacing: 0.5, marginBottom: 4 }}>YOUR ODDS</div>
+                    <input value={cOdds} onChange={(e) => setCOdds(e.target.value)} placeholder="+150" style={{ width: "100%", boxSizing: "border-box", background: C.chip, border: `1px solid ${cParsed != null ? C.line : C.red}`, borderRadius: 10, color: C.text, fontSize: 15, fontWeight: 800, padding: "9px 12px", outline: "none", textAlign: "center" }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: C.sub, letterSpacing: 0.5, marginBottom: 4 }}>YOUR STAKE (AG$)</div>
+                    <input type="number" min="0" value={cStake} onChange={(e) => setCStake(Math.max(0, Number(e.target.value) || 0))} style={{ width: "100%", boxSizing: "border-box", background: C.chip, border: `1px solid ${C.line}`, borderRadius: 10, color: C.text, fontSize: 15, fontWeight: 800, padding: "9px 12px", outline: "none", textAlign: "center" }} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: C.sub, fontWeight: 700, marginBottom: 12 }}>
+                  <span>If you win: <span style={{ color: C.green }}>{money(cToWin)}</span></span>
+                  <span>Matcher risks {money(cToWin)} to win {money(cStake)}</span>
+                </div>
+                {cParsed == null && <div style={{ fontSize: 11, color: C.red, fontWeight: 700, marginBottom: 10 }}>Odds must be American style: +150, -120, etc. (at least ±100)</div>}
+                <button onClick={submitCustom} disabled={!canCustom} style={{ width: "100%", height: 48, borderRadius: 12, border: "none", cursor: canCustom ? "pointer" : "not-allowed", background: canCustom ? C.green : C.line, color: canCustom ? "#062812" : C.sub, fontSize: 15, fontWeight: 900 }}>Post to Open Bets</button>
+                <button onClick={() => setCustomOpen(false)} style={{ width: "100%", marginTop: 8, padding: "8px", background: "none", border: "none", color: C.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>Cancel</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {matchTarget && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 55, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(0,0,0,.72)" }} onClick={() => setMatchTarget(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380, width: "100%", background: C.panel, border: `1px solid ${C.green}`, borderRadius: 16, padding: "18px 18px 20px", boxShadow: "0 20px 60px rgba(0,0,0,.6)" }}>
+            <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Match {matchTarget.bettor}'s bet</div>
+            <div style={{ fontSize: 12.5, color: C.sub, fontWeight: 600, marginBottom: 4, lineHeight: 1.4 }}>{matchTarget.competition}{matchTarget.match ? ` · ${matchTarget.match}` : ""}</div>
+            <div style={{ fontSize: 13, color: C.text, fontWeight: 700, marginBottom: 12, lineHeight: 1.4 }}>You're taking the OTHER side of: {matchTarget.pick}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", color: C.sub }}><span>You risk</span><span style={{ color: C.text, fontWeight: 800 }}>{money(Number(matchTarget.toWin) || 0)}</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0 10px", color: C.sub }}><span>You win</span><span style={{ color: C.green, fontWeight: 800 }}>{money(Number(matchTarget.stake) || 0)} <span style={{ color: C.sub, fontWeight: 700 }}>({matcherOdds(matchTarget)})</span></span></div>
+            <input value={matcher} onChange={(e) => setMatcher(e.target.value)} placeholder="Required — your name" style={{ width: "100%", boxSizing: "border-box", background: C.chip, border: `1px solid ${matcher.trim() ? C.line : C.red}`, borderRadius: 10, color: C.text, fontSize: 14, fontWeight: 700, padding: "10px 12px", outline: "none", marginBottom: 12 }} />
+            <button onClick={doMatch} disabled={!matcher.trim()} style={{ width: "100%", height: 48, borderRadius: 12, border: "none", cursor: matcher.trim() ? "pointer" : "not-allowed", background: matcher.trim() ? C.green : C.line, color: matcher.trim() ? "#062812" : C.sub, fontSize: 15, fontWeight: 900 }}>Confirm match</button>
+            <button onClick={() => setMatchTarget(null)} style={{ width: "100%", marginTop: 8, padding: "8px", background: "none", border: "none", color: C.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>Cancel</button>
+            <div style={{ fontSize: 10, color: C.sub, textAlign: "center", marginTop: 6 }}>Once matched it's locked — settle up in person. 🍺</div>
+          </div>
+        </div>
+      )}
+
       {ledgerOpen && (
         <div style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: unlocked ? "stretch" : "center", justifyContent: "center", padding: unlocked ? 0 : 20, background: "rgba(0,0,0,.78)" }} onClick={closeLedger}>
           {!unlocked ? (
@@ -895,6 +1074,7 @@ function App() {
                   <div key={i} style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                       <span style={{ fontSize: 14, fontWeight: 900 }}>{b.bettor || "—"}</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, padding: "2px 7px", borderRadius: 99, color: b.matchedBy ? C.gold : C.green, background: b.matchedBy ? "rgba(245,197,24,0.12)" : "rgba(63,220,107,0.12)" }}>{b.matchedBy ? `MATCHED · ${b.matchedBy}` : "OPEN"}</span>
                       <span style={{ marginLeft: "auto", fontSize: 15, fontWeight: 900, color: C.green }}>{b.odds}</span>
                     </div>
                     <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, margin: "3px 0", lineHeight: 1.35 }}>{b.pick}</div>
