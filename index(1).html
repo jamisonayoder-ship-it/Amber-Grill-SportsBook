@@ -12,6 +12,8 @@
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div id="root"><div class="booting">Lighting the sign…</div></div>
@@ -27,8 +29,23 @@ const { useMemo, useState, useEffect } = React;
 const POLL_MS = 60000;
 
 /* ---- PASTE YOUR GOOGLE APPS SCRIPT WEB-APP URL HERE ----
-   (ends in /exec).  Leave "" to disable bet logging.        */
-const BET_ENDPOINT = "https://script.google.com/macros/s/AKfycbwKclkI6R5jd1_0Zl6RmlpECr6pXVp3S87XuuZwbg3hpuXAnBjrrv5U5HtBpM0a5qwvMw/exec";
+   Bets are collected in Firebase Firestore (no server to run).        */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAVd6Efk3aTnRs4jXm4fOnNXY3VWnD4DjY",
+  authDomain: "amber-grill-sportsbook.firebaseapp.com",
+  projectId: "amber-grill-sportsbook",
+  storageBucket: "amber-grill-sportsbook.firebasestorage.app",
+  messagingSenderId: "600042832809",
+  appId: "1:600042832809:web:47da960da9a2600eeffab8",
+};
+const LEDGER_PIN = "5864";
+let _db = null;
+try {
+  if (window.firebase && window.firebase.initializeApp) {
+    if (!window.firebase.apps || !window.firebase.apps.length) window.firebase.initializeApp(FIREBASE_CONFIG);
+    _db = window.firebase.firestore();
+  }
+} catch (e) { _db = null; }
 
 /* ---------- Team Keeper Wars — 9 group score feeds ---------- */
 const TKW_FEEDS = [
@@ -116,12 +133,13 @@ function probToAmerican(q) {
   q = Math.min(Math.max(q, 0.02), 0.98);
   return q >= 0.5 ? -Math.round((100 * q) / (1 - q)) : Math.round((100 * (1 - q)) / q);
 }
-const compress = (p, k = 0.8) => 0.5 + (p - 0.5) * k;
+const compress = (p, k = 0.68) => 0.5 + (p - 0.5) * k;
+const capPlus = (a, max = 400) => (a > max ? max : a);
 function threeWay(pA2, ratingDiff) {
   const pc = compress(pA2);
   const drawP = 0.16 + 0.14 * Math.exp(-Math.abs(ratingDiff) / 250);
-  const pA = (1 - drawP) * pc, pB = (1 - drawP) * (1 - pc), h = 1.22;
-  return [probToAmerican(pA * h), probToAmerican(drawP * h), probToAmerican(pB * h)];
+  const pA = (1 - drawP) * pc, pB = (1 - drawP) * (1 - pc), h = 1.40;
+  return [capPlus(probToAmerican(pA * h)), capPlus(probToAmerican(drawP * h)), capPlus(probToAmerican(pB * h))];
 }
 function liveThreeWay(g, s) {
   const goalDiff = s.a - s.b;
@@ -130,10 +148,10 @@ function liveThreeWay(g, s) {
   const drawP = goalDiff === 0
     ? Math.min(0.72, 0.16 + 0.34 * s.p)
     : (0.14 + 0.16 * Math.exp(-Math.abs(eff) / 250)) * (1 - 0.75 * s.p);
-  const pA = (1 - drawP) * pA2, pB = (1 - drawP) * (1 - pA2), h = 1.22;
-  return [probToAmerican(pA * h), probToAmerican(drawP * h), probToAmerican(pB * h)];
+  const pA = (1 - drawP) * pA2, pB = (1 - drawP) * (1 - pA2), h = 1.40;
+  return [capPlus(probToAmerican(pA * h)), capPlus(probToAmerican(drawP * h)), capPlus(probToAmerican(pB * h))];
 }
-function futuresAmerican(q) { return q >= 0.5 ? -Math.round((100 * q) / (1 - q)) : Math.min(6000, Math.round((100 * (1 - q)) / q)); }
+function futuresAmerican(q) { return q >= 0.5 ? -Math.round((100 * q) / (1 - q)) : Math.min(400, Math.round((100 * (1 - q)) / q)); }
 const toDecimal = (a) => (a > 0 ? a / 100 + 1 : 100 / -a + 1);
 function toAmerican(dec) { if (dec <= 1.0001) return -100000; return dec >= 2 ? Math.round((dec - 1) * 100) : Math.round(-100 / (dec - 1)); }
 const fmt = (a) => (a > 0 ? `+${a}` : `${a}`);
@@ -142,10 +160,10 @@ const money = (v) => `AG$${v.toFixed(2)}`;
 
 function buildProps() {
   return [
-    { key: "fg5", title: "Goal within the first 0:05", opts: [["Yes", 900], ["No", -4000]] },
-    { key: "og", title: "Own goal in the match", opts: [["Yes", 450], ["No", -700]] },
-    { key: "posts", title: "Over 2.5 posts/crossbars hit", opts: [["Over 2.5", -145], ["Under 2.5", -145]] },
-    { key: "dome", title: "Kid gets domed in the head (trainer required)", opts: [["Yes", -140], ["No", -145]] },
+    { key: "fg5", title: "Goal within the first 0:05", opts: [["Yes", 400], ["No", -4000]] },
+    { key: "og", title: "Own goal in the match", opts: [["Yes", 300], ["No", -700]] },
+    { key: "posts", title: "Over 2.5 posts/crossbars hit", opts: [["Over 2.5", -165], ["Under 2.5", -165]] },
+    { key: "dome", title: "Kid gets domed in the head (trainer required)", opts: [["Yes", -160], ["No", -160]] },
   ];
 }
 
@@ -158,9 +176,9 @@ function makeGame({ key, group, conf, A, B, rA, rB, round, time, avg = 8 }) {
     key, group, conf: conf || group, round: round || "Rd 1", time: time || "",
     A, B, ratingA: rA, ratingB: rB,
     markets: {
-      spread: { aLine: spread <= 0 ? spread : -spread, bLine: spread <= 0 ? -spread : spread, aOdds: -145, bOdds: -145 },
+      spread: { aLine: spread <= 0 ? spread : -spread, bLine: spread <= 0 ? -spread : spread, aOdds: -165, bOdds: -165 },
       ml: { aOdds: mlA, drawOdds: mlD, bOdds: mlB },
-      total: { line: total, overOdds: -145, underOdds: -145 },
+      total: { line: total, overOdds: -165, underOdds: -165 },
     },
     props: buildProps(),
   };
@@ -182,8 +200,9 @@ function buildTkwBoard(T) {
 function buildFuturesFrom(arr, compName) {
   if (!arr.length) return [];
   const strength = arr.map((t) => Math.pow(10, t.rating / 640));
-  const sum = strength.reduce((a, b) => a + b, 0);
-  return arr.map((t, i) => ({ name: t.name, group: t.group, conf: t.conf || compName, odds: futuresAmerican(Math.min(0.92, (strength[i] / sum) * 2.3)) }))
+  const maxStr = Math.max(...strength);
+  // Favorite anchored around +140; everyone else scaled down by strength, capped at +400.
+  return arr.map((t, i) => ({ name: t.name, group: t.group, conf: t.conf || compName, odds: futuresAmerican(Math.min(0.95, 0.42 * strength[i] / maxStr)) }))
     .sort((a, b) => toDecimal(a.odds) - toDecimal(b.odds));
 }
 
@@ -276,12 +295,12 @@ function GameCard({ game, selected, toggle, hideToggle = false }) {
     </div>
   );
   return (
-    <div style={{ background: C.panel, border: `1px solid ${game.live ? C.red : C.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
+    <div style={{ background: C.panel, border: `1px solid ${game.live ? C.gold : C.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <Badge bg={C.chip}>Grp {game.group}</Badge>
         <Badge bg={C.chip}>{game.conf}</Badge>
         {game.live
-          ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 800, color: C.red, letterSpacing: 0.5 }}><span style={{ width: 7, height: 7, borderRadius: 99, background: C.red }} />LIVE</span>
+          ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 800, color: C.gold, letterSpacing: 0.5 }}><span style={{ width: 7, height: 7, borderRadius: 99, background: C.gold }} />FINAL</span>
           : <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>{game.round}{game.time ? ` · ${game.time}` : ""}</span>}
         {game.live && <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 800, color: C.gold }}>{game.scoreA}–{game.scoreB}</span>}
       </div>
@@ -382,6 +401,7 @@ function rosterArray(groups, seedMax) {
 // Poll a competition's score feeds and map live results onto its board by team name.
 function useLiveScores(feeds, baseBoard) {
   const [scores, setScores] = useState({});
+  const [results, setResults] = useState([]); // every final result, for rating updates
   const [feed, setFeed] = useState("idle");
   useEffect(() => {
     let stop = false;
@@ -393,6 +413,7 @@ function useLiveScores(feeds, baseBoard) {
     async function pull() {
       let anyOk = false;
       const next = {};
+      const byGame = {}; // dedupe result rows by pair+round
       await Promise.all(feeds.map(async (url) => {
         try {
           const res = await fetch(url, { cache: "no-store" });
@@ -402,6 +423,7 @@ function useLiveScores(feeds, baseBoard) {
           anyOk = true;
           parseGroupFixtures(parseCSV(txt)).forEach((m) => {
             if (!m.played) return;
+            byGame[[norm(m.home), norm(m.away)].sort().join("|") + "#r" + m.round] = m;
             const hit = lookup[norm(m.home) + "|" + norm(m.away)];
             if (!hit) return;
             next[hit.key] = hit.aIsHome ? { a: m.hs, b: m.as, p: 1 } : { a: m.as, b: m.hs, p: 1 };
@@ -409,13 +431,55 @@ function useLiveScores(feeds, baseBoard) {
         } catch (e) { /* keep other feeds alive */ }
       }));
       if (stop) return;
-      setScores(next); setFeed(anyOk ? "live" : "manual");
+      setScores(next);
+      setResults(Object.values(byGame).sort((a, b) => a.round - b.round));
+      setFeed(anyOk ? "live" : "manual");
     }
     pull();
     const id = setInterval(pull, POLL_MS);
     return () => { stop = true; clearInterval(id); };
   }, [feeds, baseBoard]);
-  return { scores, feed };
+  return { scores, results, feed };
+}
+
+/* Elo-style rating pass over every FINAL result, in round order.
+   A win moves you up; the move scales with margin of victory, and beating a
+   stronger opponent moves you more (expected-score term handles that).
+   The loser gives up the same amount. Draws nudge toward the underdog. */
+function adjustedRatings(baseBoard, results) {
+  const cur = {};
+  baseBoard.forEach((g) => { if (!(norm(g.A) in cur)) cur[norm(g.A)] = g.ratingA; if (!(norm(g.B) in cur)) cur[norm(g.B)] = g.ratingB; });
+  results.forEach((m) => {
+    const h = norm(m.home), a = norm(m.away);
+    if (!(h in cur)) cur[h] = seedRating(m.home);
+    if (!(a in cur)) cur[a] = seedRating(m.away);
+    const expected = winProb(cur[h], cur[a]);              // opponent strength baked in
+    const actual = m.hs > m.as ? 1 : m.hs < m.as ? 0 : 0.5;
+    const margin = Math.abs(m.hs - m.as);
+    const K = 30 * (1 + 0.35 * Math.max(0, margin - 1));   // bigger margin → bigger move
+    const d = K * (actual - expected);
+    cur[h] += d; cur[a] -= d;
+  });
+  return cur;
+}
+
+// Rebuild a board's pre-game markets from result-adjusted ratings.
+function rerateBoard(baseBoard, results, avg) {
+  if (!results.length) return baseBoard;
+  const cur = adjustedRatings(baseBoard, results);
+  return baseBoard.map((g) => makeGame({
+    key: g.key, group: g.group, conf: g.conf, A: g.A, B: g.B,
+    rA: cur[norm(g.A)] != null ? cur[norm(g.A)] : g.ratingA,
+    rB: cur[norm(g.B)] != null ? cur[norm(g.B)] : g.ratingB,
+    round: g.round, time: g.time, avg,
+  }));
+}
+
+// Apply the same adjusted ratings to a futures field.
+function rerateTeams(teamList, baseBoard, results) {
+  if (!results.length) return teamList;
+  const cur = adjustedRatings(baseBoard, results);
+  return teamList.map((t) => ({ ...t, rating: cur[norm(t.name)] != null ? cur[norm(t.name)] : t.rating }));
 }
 
 function overlayLive(board, scores) {
@@ -427,20 +491,23 @@ function overlayLive(board, scores) {
   });
 }
 
-// Exchange: post (add / match) is fire-and-forget; the open-bet list is read back via GET.
-async function postExchange(action, payload) {
-  if (!BET_ENDPOINT) return;
-  try {
-    await fetch(BET_ENDPOINT, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, ...payload }) });
-  } catch (e) { /* fire and forget */ }
+// Timestamp to the second, e.g. 2026-07-09 13:20:45
+function stampNow() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
-async function fetchOpenBets() {
-  if (!BET_ENDPOINT) return [];
+async function submitBet(bet) {
+  if (!_db) return { ok: false, error: "no-db" };
+  try { await _db.collection("bets").add(bet); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+}
+async function fetchAllBets() {
+  if (!_db) return null;
   try {
-    const res = await fetch(BET_ENDPOINT + "?action=list", { method: "GET" });
-    const data = await res.json();
-    return Array.isArray(data.bets) ? data.bets : [];
-  } catch (e) { return null; } // null = couldn't reach
+    const snap = await _db.collection("bets").orderBy("tsMs", "desc").get();
+    return snap.docs.map((d) => d.data());
+  } catch (e) { return null; }
 }
 
 /* ============ NEON INTRO — Amber Grill logo in a neon-bordered bar sign ============ */
@@ -506,9 +573,6 @@ function App() {
   const tkwBase = useMemo(() => buildTkwBoard(T), [T]);
   const dougBase = useMemo(() => buildCompBoard(DOUG_GROUPS, "doug", 5, 90), []);
   const stanBase = useMemo(() => buildCompBoard(STAN_GROUPS, "stan", 10, 100), []);
-  const tkwFutures = useMemo(() => buildFuturesFrom(Object.values(T).map((t) => ({ name: t.name, group: t.group, conf: t.conf, rating: t.rating })), "TKW World Cup"), [T]);
-  const dougFutures = useMemo(() => buildFuturesFrom(rosterArray(DOUG_GROUPS, 90), "Doug's"), []);
-  const stanFutures = useMemo(() => buildFuturesFrom(rosterArray(STAN_GROUPS, 100), "Stan's"), []);
 
   const [comp, setComp] = useState("tkw");
   const [view, setView] = useState("games");
@@ -530,9 +594,15 @@ function App() {
   const dougLive = useLiveScores(DOUG_FEEDS, dougBase);
   const stanLive = useLiveScores(STAN_FEEDS, stanBase);
 
-  const tkwBoard = useMemo(() => overlayLive(tkwBase, tkwLive.scores), [tkwBase, tkwLive.scores]);
-  const dougBoard = useMemo(() => overlayLive(dougBase, dougLive.scores), [dougBase, dougLive.scores]);
-  const stanBoard = useMemo(() => overlayLive(stanBase, stanLive.scores), [stanBase, stanLive.scores]);
+  // Results feed forward: every final score re-rates the field (margin- and
+  // opponent-weighted), moving each team's next-game odds and title odds.
+  const tkwBoard = useMemo(() => overlayLive(rerateBoard(tkwBase, tkwLive.results, 8), tkwLive.scores), [tkwBase, tkwLive.results, tkwLive.scores]);
+  const dougBoard = useMemo(() => overlayLive(rerateBoard(dougBase, dougLive.results, 5), dougLive.scores), [dougBase, dougLive.results, dougLive.scores]);
+  const stanBoard = useMemo(() => overlayLive(rerateBoard(stanBase, stanLive.results, 10), stanLive.scores), [stanBase, stanLive.results, stanLive.scores]);
+
+  const tkwFutures = useMemo(() => buildFuturesFrom(rerateTeams(Object.values(T).map((t) => ({ name: t.name, group: t.group, conf: t.conf, rating: t.rating })), tkwBase, tkwLive.results), "TKW World Cup"), [T, tkwBase, tkwLive.results]);
+  const dougFutures = useMemo(() => buildFuturesFrom(rerateTeams(rosterArray(DOUG_GROUPS, 90), dougBase, dougLive.results), "Doug's"), [dougBase, dougLive.results]);
+  const stanFutures = useMemo(() => buildFuturesFrom(rerateTeams(rosterArray(STAN_GROUPS, 100), stanBase, stanLive.results), "Stan's"), [stanBase, stanLive.results]);
 
   const comps = {
     tkw: { name: "Team Keeper Wars", short: "TKW", board: tkwBoard, futures: tkwFutures, feed: tkwLive.feed },
@@ -541,32 +611,20 @@ function App() {
   };
   const active = comps[comp];
 
-  // ---- Peer exchange: open bets read from / matched via the Google Sheet ----
-  const [openBets, setOpenBets] = useState([]);
-  const [openReach, setOpenReach] = useState("idle"); // idle | ok | down
-  const [showOpen, setShowOpen] = useState(false);
-  const [matchTarget, setMatchTarget] = useState(null);
-  const [matcher, setMatcher] = useState("");
-  const refreshOpen = async () => {
-    const b = await fetchOpenBets();
-    if (b === null) setOpenReach("down"); else { setOpenReach("ok"); setOpenBets(b); }
+  // ---- PIN-locked ledger: every submitted bet, timestamped ----
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [pin, setPin] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
+  const [allBets, setAllBets] = useState(null); // null = not loaded / error
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const loadLedger = async () => {
+    setLedgerLoading(true);
+    const bets = await fetchAllBets();
+    setAllBets(bets);
+    setLedgerLoading(false);
   };
-  useEffect(() => {
-    let stop = false;
-    const run = async () => { const b = await fetchOpenBets(); if (stop) return; if (b === null) setOpenReach("down"); else { setOpenReach("ok"); setOpenBets(b); } };
-    run();
-    const id = setInterval(run, 20000);
-    return () => { stop = true; clearInterval(id); };
-  }, []);
-  const compOf = (l) => { const gk = l.gk || ""; if (gk.indexOf("doug") === 0 || gk.indexOf("dougsgame") >= 0) return "Doug's"; if (gk.indexOf("stan") === 0 || gk.indexOf("stansgame") >= 0) return "Stan's"; return "TKW"; };
-  const matcherOdds = (b) => { const risk = Number(b.counterRisk), win = Number(b.counterWin); if (!risk || !win) return ""; return fmt(toAmerican(1 + win / risk)); };
-  const doMatch = () => {
-    if (!matchTarget || !matcher.trim()) return;
-    postExchange("match", { ticketId: matchTarget.ticketId, matcher: matcher.trim() });
-    setOpenBets((p) => p.filter((b) => b.ticketId !== matchTarget.ticketId)); // optimistic
-    setMatchTarget(null); setMatcher("");
-    setTimeout(refreshOpen, 1500);
-  };
+  const tryPin = () => { if (pin === LEDGER_PIN) { setUnlocked(true); loadLedger(); } };
+  const closeLedger = () => { setLedgerOpen(false); setPin(""); setUnlocked(false); };
 
   const toggle = (leg) => {
     setPlaced(null);
@@ -586,20 +644,23 @@ function App() {
   const profit = payout - stake, rake = payout * 0.05, net = payout - rake;
 
   const canPlace = legs.length > 0 && stake > 0 && bettor.trim().length > 0;
+  const compOf = (l) => { const gk = l.gk || ""; if (gk.indexOf("doug") === 0 || gk.indexOf("dougsgame") >= 0) return "Doug's"; if (gk.indexOf("stan") === 0 || gk.indexOf("stansgame") >= 0) return "Stan's"; return "TKW"; };
   const placeBet = () => {
     if (!canPlace) return;
     const ticketId = "AG-" + Math.random().toString(36).slice(2, 8).toUpperCase();
-    const counterRisk = Number(profit.toFixed(2)); // matcher risks the poster's winnings
-    const counterWin = stake;                       // matcher wins the poster's stake
-    postExchange("add", {
-      ticketId, bettor: bettor.trim(),
+    submitBet({
+      ticketId,
+      tsMs: Date.now(),
+      time: stampNow(),
+      bettor: bettor.trim(),
       competition: [...new Set(legs.map(compOf))].join(", "),
       match: legs.length > 1 ? `${legs.length}-leg parlay` : (legs[0] && legs[0].match) || "",
       pick: legs.map((l) => `${l.label} (${fmt(l.odds)})`).join("  +  "),
-      odds: fmt(combinedAmerican), stake, counterRisk, counterWin,
+      odds: fmt(combinedAmerican),
+      stake,
+      toWin: Number(profit.toFixed(2)),
     });
     setPlaced(ticketId);
-    setTimeout(refreshOpen, 1500);
   };
 
   const HOLD_MS = 1100;
@@ -669,30 +730,11 @@ function App() {
         </span>
       </header>
 
-      {/* peer exchange — open bets anyone can match */}
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "10px 12px 0" }}>
-        <button onClick={() => setShowOpen((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, cursor: "pointer", border: `1px solid ${showOpen ? C.green : C.line}`, background: C.panel, color: C.text }}>
-          <span style={{ fontSize: 14, fontWeight: 900 }}>🤝 Open Bets</span>
-          <span style={{ fontSize: 11, fontWeight: 800, color: C.green, background: "rgba(63,220,107,0.14)", borderRadius: 99, padding: "2px 8px" }}>{openBets.length}</span>
-          <span style={{ marginLeft: "auto", fontSize: 12, color: C.sub, fontWeight: 700 }}>{showOpen ? "Hide ▲" : "Match a bet ▼"}</span>
+      {/* staff ledger — PIN locked */}
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "10px 12px 0", display: "flex", justifyContent: "flex-end" }}>
+        <button onClick={() => { setLedgerOpen(true); setPin(""); setUnlocked(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 99, cursor: "pointer", border: `1px solid ${C.line}`, background: C.panel, color: C.sub, fontWeight: 800, fontSize: 12 }}>
+          🔒 Staff ledger
         </button>
-        {showOpen && (
-          <div style={{ marginTop: 8 }}>
-            {openReach === "down" && <div style={{ padding: "16px 12px", textAlign: "center", color: C.sub, fontSize: 12.5, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10 }}>Couldn't reach the exchange. Try again shortly.</div>}
-            {openReach !== "down" && openBets.length === 0 && <div style={{ padding: "16px 12px", textAlign: "center", color: C.sub, fontSize: 12.5, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10 }}>No open bets right now. Place one and it lands here for someone to match.</div>}
-            {openBets.map((b) => (
-              <div key={b.ticketId} style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.bettor || "—"}</div>
-                  <div style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>risk {money(Number(b.counterRisk) || 0)} → win {money(Number(b.counterWin) || 0)}</div>
-                </div>
-                <button onClick={() => { setMatcher(""); setMatchTarget(b); }} style={{ flexShrink: 0, padding: "10px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${C.green}`, background: "rgba(63,220,107,0.12)", color: C.green, fontWeight: 800, fontSize: 12.5, lineHeight: 1.15, textAlign: "center" }}>
-                  Match this bet<br /><span style={{ fontSize: 13.5, fontWeight: 900 }}>{matcherOdds(b)}</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* competition selector */}
@@ -824,18 +866,50 @@ function App() {
         </div>
       )}
 
-      {matchTarget && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(0,0,0,.72)" }} onClick={() => setMatchTarget(null)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380, width: "100%", background: C.panel, border: `1px solid ${C.green}`, borderRadius: 16, padding: "18px 18px 20px", boxShadow: "0 20px 60px rgba(0,0,0,.6)" }}>
-            <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Match {matchTarget.bettor}'s bet</div>
-            <div style={{ fontSize: 12.5, color: C.sub, fontWeight: 600, marginBottom: 12, lineHeight: 1.4 }}>You're taking the other side of: <span style={{ color: C.text }}>{matchTarget.pick}</span>{matchTarget.match ? ` · ${matchTarget.match}` : ""}</div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", color: C.sub }}><span>You risk</span><span style={{ color: C.text, fontWeight: 800 }}>{money(Number(matchTarget.counterRisk) || 0)}</span></div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0 10px", color: C.sub }}><span>You win</span><span style={{ color: C.green, fontWeight: 800 }}>{money(Number(matchTarget.counterWin) || 0)} <span style={{ color: C.sub, fontWeight: 700 }}>({matcherOdds(matchTarget)})</span></span></div>
-            <input value={matcher} onChange={(e) => setMatcher(e.target.value)} placeholder="Required — your name" style={{ width: "100%", boxSizing: "border-box", background: C.chip, border: `1px solid ${matcher.trim() ? C.line : C.red}`, borderRadius: 10, color: C.text, fontSize: 14, fontWeight: 700, padding: "10px 12px", outline: "none", marginBottom: 12 }} />
-            <button onClick={doMatch} disabled={!matcher.trim()} style={{ width: "100%", height: 48, borderRadius: 12, border: "none", cursor: matcher.trim() ? "pointer" : "not-allowed", background: matcher.trim() ? C.green : C.line, color: matcher.trim() ? "#062812" : C.sub, fontSize: 15, fontWeight: 900 }}>Confirm match</button>
-            <button onClick={() => setMatchTarget(null)} style={{ width: "100%", marginTop: 8, padding: "8px", background: "none", border: "none", color: C.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>Cancel</button>
-            <div style={{ fontSize: 10, color: C.sub, textAlign: "center", marginTop: 6 }}>Once matched it's locked — settle up in person. 🍺</div>
-          </div>
+      {ledgerOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: unlocked ? "stretch" : "center", justifyContent: "center", padding: unlocked ? 0 : 20, background: "rgba(0,0,0,.78)" }} onClick={closeLedger}>
+          {!unlocked ? (
+            <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 320, width: "100%", background: C.panel, border: `1px solid ${C.line}`, borderRadius: 16, padding: "22px 20px", boxShadow: "0 20px 60px rgba(0,0,0,.6)", textAlign: "center" }}>
+              <div style={{ fontSize: 30, marginBottom: 6 }}>🔒</div>
+              <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 2 }}>Staff Ledger</div>
+              <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, marginBottom: 14 }}>Enter PIN to view all submitted bets</div>
+              <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") tryPin(); }} type="password" inputMode="numeric" placeholder="••••" autoFocus style={{ width: "100%", boxSizing: "border-box", textAlign: "center", letterSpacing: 8, background: C.chip, border: `1px solid ${pin && pin !== LEDGER_PIN ? C.red : C.line}`, borderRadius: 10, color: C.text, fontSize: 22, fontWeight: 900, padding: "10px 12px", outline: "none", marginBottom: 12 }} />
+              <button onClick={tryPin} style={{ width: "100%", height: 46, borderRadius: 12, border: "none", cursor: "pointer", background: C.green, color: "#062812", fontSize: 15, fontWeight: 900 }}>Unlock</button>
+              <button onClick={closeLedger} style={{ width: "100%", marginTop: 8, padding: "6px", background: "none", border: "none", color: C.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+            </div>
+          ) : (
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 640, margin: "0 auto", background: C.bg, display: "flex", flexDirection: "column", height: "100%" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 14px 10px", borderBottom: `1px solid ${C.line}`, background: C.panel }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 900 }}>Staff Ledger</div>
+                  <div style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>{allBets === null ? "—" : `${allBets.length} bet${allBets.length === 1 ? "" : "s"} submitted`}</div>
+                </div>
+                <button onClick={loadLedger} style={{ padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${C.line}`, background: C.chip, color: C.text, fontWeight: 800, fontSize: 12 }}>↻ Refresh</button>
+                <button onClick={closeLedger} style={{ padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${C.line}`, background: C.chip, color: C.sub, fontWeight: 800, fontSize: 12 }}>Close</button>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: "10px 12px 24px" }}>
+                {ledgerLoading && <div style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 24 }}>Loading…</div>}
+                {!ledgerLoading && allBets === null && <div style={{ textAlign: "center", color: C.red, fontSize: 13, padding: 24, lineHeight: 1.5 }}>Couldn't reach the database. Check the connection and hit Refresh.</div>}
+                {!ledgerLoading && allBets && allBets.length === 0 && <div style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 24 }}>No bets submitted yet.</div>}
+                {!ledgerLoading && allBets && allBets.map((b, i) => (
+                  <div key={i} style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <span style={{ fontSize: 14, fontWeight: 900 }}>{b.bettor || "—"}</span>
+                      <span style={{ marginLeft: "auto", fontSize: 15, fontWeight: 900, color: C.green }}>{b.odds}</span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, margin: "3px 0", lineHeight: 1.35 }}>{b.pick}</div>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11, color: C.sub, fontWeight: 600 }}>
+                      <span>🕒 {b.time || ""}</span>
+                      {b.competition ? <span>· {b.competition}</span> : null}
+                      <span>· Stake {money(Number(b.stake) || 0)}</span>
+                      <span>· To win {money(Number(b.toWin) || 0)}</span>
+                      {b.ticketId ? <span>· {b.ticketId}</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
